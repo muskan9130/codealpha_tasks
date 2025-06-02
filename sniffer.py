@@ -1,48 +1,44 @@
-import socket
-import struct
+import tkinter as tk
+from tkinter import scrolledtext
+from scapy.all import sniff
+import threading
 
-def parse_ip_header(data):
-    # Unpack first 20 bytes of the IP header
-    ip_header = struct.unpack('!BBHHHBBH4s4s', data[:20])
 
-    version_ihl = ip_header[0]
-    version = version_ihl >> 4
-    ihl = (version_ihl & 0xF) * 4
+class PacketSnifferGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Packet Sniffer")
 
-    src_ip = socket.inet_ntoa(ip_header[8])
-    dest_ip = socket.inet_ntoa(ip_header[9])
+        self.text_area = scrolledtext.ScrolledText(root, width=100, height=30)
+        self.text_area.pack(padx=10, pady=10)
 
-    return {
-        'version': version,
-        'header_length': ihl,
-        'src_ip': src_ip,
-        'dest_ip': dest_ip
-    }
+        self.start_button = tk.Button(root, text="Start Sniffing", command=self.start_sniffing)
+        self.start_button.pack(pady=5)
 
-def main():
-    try:
-        # Create raw socket for capturing IP packets
-        sniffer = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_IP)
-        sniffer.bind(("YOUR IP", 0))  # Adjust to your local IP if needed
-        sniffer.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
+        self.stop_button = tk.Button(root, text="Stop Sniffing", command=self.stop_sniffing, state=tk.DISABLED)
+        self.stop_button.pack(pady=5)
 
-        print("📡 Sniffing started on YOUR IP... Press Ctrl+C to stop.\n")
+        self.sniffing = False
 
-        while True:
-            raw_data = sniffer.recvfrom(65565)[0]
-            ip_info = parse_ip_header(raw_data)
+    def start_sniffing(self):
+        self.sniffing = True
+        self.start_button.config(state=tk.DISABLED)
+        self.stop_button.config(state=tk.NORMAL)
+        threading.Thread(target=self.sniff_packets, daemon=True).start()
 
-            print("📦 Captured Packet:")
-            print(f"   ➤ Source IP      : {ip_info['src_ip']}")
-            print(f"   ➤ Destination IP : {ip_info['dest_ip']}")
-            print(f"   ➤ IP Version     : {ip_info['version']}")
-            print(f"   ➤ Header Length  : {ip_info['header_length']} bytes")
-            print("-" * 50)
+    def stop_sniffing(self):
+        self.sniffing = False
+        self.start_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
 
-    except PermissionError:
-        print("🚫 Run this script with sudo.")
-    except KeyboardInterrupt:
-        print("\n🛑 Sniffing stopped.")
+    def sniff_packets(self):
+        sniff(prn=self.display_packet, stop_filter=lambda x: not self.sniffing)
+
+    def display_packet(self, packet):
+        self.text_area.insert(tk.END, f"{packet.summary()}\n")
+        self.text_area.yview(tk.END)
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = PacketSnifferGUI(root)
+    root.mainloop()
